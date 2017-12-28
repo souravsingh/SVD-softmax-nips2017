@@ -34,3 +34,26 @@ class SVD-Softmax(object):
         _s, U, V = tf.svd(weights, full_matrices=False)
         self.b.assign(tf.matmul(U, tf.diag(_s)))
         self.V_t.assign(tf.transpose(V))
+    
+    def get_output(self, dec_output, biases):
+        """
+        get svd-softmax approximation
+        :param dec: A Tensor [batch_size*seq_length, hidden_units], decoder output
+        :param biases: A Tensor [tgt_vocab_size], output bias
+        :return: A Tensor [batch_size*seq_length, tgt_vocab_size], output after softmax approximation
+        """
+        _h = tf.einsum('ij,aj->ai', self.V_t, dec_output)
+        _z = tf.add(tf.einsum('ij,aj->ai', self.B[:, :self.window_size], _h[:, :self.window_size]), biases)
+
+        top_k = tf.nn.top_k(_z, k=self.tgt_vocab_size)
+        _indices, values = top_k.indices, top_k.values
+
+        _z = tf.add(tf.squeeze(tf.matmul(tf.gather(self.B, _indices[:, :self.num_full_view]), tf.expand_dims(_h, axis=-1))),
+                    tf.gather(biases, _indices[:, :self.num_full_view]))
+        _z = tf.concat([_z, values[:, self.num_full_view:]], axis=-1)
+        _z = tf.map_fn(lambda x: tf.gather(x[0], tf.invert_permutation(x[1])), (_z, _indices), dtype=tf.float32)
+        _z = tf.exp(_z)
+        Z = tf.expand_dims(tf.reduce_sum(_z, axis=-1), axis=1)
+        logits = _z / Z
+
+        return logits
