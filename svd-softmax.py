@@ -31,7 +31,7 @@ class SVD-Softmax(object):
         update svd parameter b, V_t
         :param weights: output weight of softmax
         """
-        _s, U, V = tf.svd(weights, full_matrices=False)
+        _s, U, V = np.linalg.svd(weights, full_matrices=0)
         self.b.assign(tf.matmul(U, tf.diag(_s)))
         self.V_t.assign(tf.transpose(V))
     
